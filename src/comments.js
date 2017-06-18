@@ -24,13 +24,14 @@ function getSortedChildNodes(node, text, resultArray) {
   if (resultArray) {
     if (
       node &&
-      node.type &&
-      node.type !== "CommentBlock" &&
-      node.type !== "CommentLine" &&
-      node.type !== "Line" &&
-      node.type !== "Block" &&
-      node.type !== "EmptyStatement" &&
-      node.type !== "TemplateElement"
+      ((node.type &&
+        node.type !== "CommentBlock" &&
+        node.type !== "CommentLine" &&
+        node.type !== "Line" &&
+        node.type !== "Block" &&
+        node.type !== "EmptyStatement" &&
+        node.type !== "TemplateElement") ||
+        (node.kind && node.kind !== "Comment"))
     ) {
       // This reverse insertion sort almost always takes constant
       // time because we almost always (maybe always?) append the
@@ -253,7 +254,13 @@ function attach(comments, ast, text) {
         handleOnlyComments(enclosingNode, ast, comment, isLastComment) ||
         handleClassMethodComments(enclosingNode, comment) ||
         handleTypeAliasComments(enclosingNode, followingNode, comment) ||
-        handleVariableDeclaratorComments(enclosingNode, followingNode, comment)
+        handleVariableDeclaratorComments(
+          enclosingNode,
+          followingNode,
+          comment
+        ) ||
+        handleTrailingGraphQLComments(precedingNode, comment) ||
+        handleLeadingGraphQLComments(followingNode, comment)
       ) {
         // We're good
       } else if (precedingNode) {
@@ -823,11 +830,39 @@ function handleVariableDeclaratorComments(
   return false;
 }
 
+function handleTrailingGraphQLComments(precedingNode, comment) {
+  if (
+    precedingNode &&
+    precedingNode.kind &&
+    (precedingNode.kind === "Field" ||
+      precedingNode.kind === "VariableDefinition")
+  ) {
+    addLeadingComment(precedingNode, comment);
+    return true;
+  }
+  return false;
+}
+
+function handleLeadingGraphQLComments(followingNode, comment) {
+  if (
+    followingNode &&
+    followingNode.kind &&
+    (followingNode.kind === "Field" ||
+      followingNode.kind === "OperationDefinition")
+  ) {
+    addLeadingComment(followingNode, comment);
+    return true;
+  }
+  return false;
+}
+
 function printComment(commentPath, options) {
   const comment = commentPath.getValue();
   comment.printed = true;
 
-  switch (comment.type) {
+  switch (comment.type || comment.kind) {
+    case "Comment":
+      return "#" + comment.value;
     case "CommentBlock":
     case "Block":
       return "/*" + comment.value + "*/";
